@@ -1,0 +1,18 @@
+#!/bin/sh
+
+echo INSTALL SCRIPT STARTING
+mkdir /Library/Application\ Support/Nightmare
+echo Changing permissions on daemon
+chmod 755 /usr/bin/nightmared
+chown root:wheel /usr/bin/nightmared
+chmod 755 /Library/LaunchDaemons/com.andermoran.nightmared.plist
+chown root:wheel /Library/LaunchDaemons/com.andermoran.nightmared.plist
+echo Unloading daemon
+launchctl unload /Library/LaunchDaemons/com.andermoran.nightmared.plist
+echo Loading daemon
+launchctl load /Library/LaunchDaemons/com.andermoran.nightmared.plist
+echo Daemon loaded successfully
+echo INSTALL SCRIPT ENDING
+echo Follow me on twitter @andermorandev
+echo Add me on snapchat @notander
+exit 0

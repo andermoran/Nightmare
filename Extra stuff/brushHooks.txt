@@ -1,0 +1,337 @@
+%hook SCColorPicker
+- (void)colorPress:(id)arg1 {
+	useDefaultBrushColor = false;
+	%orig();
+}
+%end
+
+%hook SCDrawingView
+
+// Sets size of the brush
+- (void)startNewStrokeWithColor:(id)arg1 {
+	SCSingleStrokeDrawingView *singleStrokeDrawingView = MSHookIvar<SCSingleStrokeDrawingView *>(self, "_singleStrokeDrawingView");
+	switch (brushButtonState)
+	{
+		case 0:
+			brushWidth = 1.0;
+			break;
+	
+		case 1:
+			brushWidth = 5.0;
+			break;
+		
+		case 2:
+			brushWidth = 10.0;
+			break;
+		
+		case 3:
+			brushWidth = 25.0;
+			break;
+		
+		case 4:
+			brushWidth = 40.0;
+			break;
+		
+		case 5:
+			brushWidth = 55.0;
+			break;
+		
+		case 6:
+			brushWidth = 70.0;
+			break;
+		
+		case 7: // Set by 3d touch
+			// Already set in the release button action
+			break;
+		default:
+			break;
+
+	 }
+	singleStrokeDrawingView.lineWidth = brushWidth;
+	if (useDefaultBrushColor) {
+		%orig(defaultBrushColor);
+	} else {
+		%orig();
+	}
+	
+}
+%end
+
+%hook PreviewViewController
+// Adjusts the button positions when the device is rotated and the circle for 3D
+- (void)willRotateToInterfaceOrientation:(long long)arg1 duration:(double)arg2 {
+	// if port then arg1 = 1
+	// if land then arg1 = 4
+	%orig;
+	if (arg1 == 1) {
+		isPortrait = true;
+		threeDBrushButton.frame = CGRectMake(screenWidth-68, (screenHeight/4)+55, 70, 70);
+		brushButton.frame = CGRectMake(screenWidth-68, (screenHeight/4)+10, 70, 70);
+		checkmarkView.frame = CGRectMake((screenWidth/2)-150/2, (screenHeight/4)-100/2, 150, 100);
+	} else if (arg1 == 4) {
+		isPortrait = false;
+		threeDBrushButton.frame = CGRectMake(screenHeight-68, (screenWidth/4)+127, 70, 70);
+		brushButton.frame = CGRectMake(screenHeight-68, (screenWidth/4)+82, 70, 70);
+		checkmarkView.frame = CGRectMake((screenHeight/2)-150/2, (screenWidth/4)-100/2, 150, 100);
+	}
+	
+	//NSLog(@"Nightmare::willRotateToInterfaceOrientation arg1 = %lld", arg1);
+}
+
+// To hide the brush button and 3D button when the user is drawing
+- (void)didStartDrawing {
+	%orig;
+	brushButton.hidden = true;
+	threeDBrushButton.hidden = true;
+}
+
+// To show the brush button and 3D button when the user is done drawing
+- (void)didEndDrawing {
+	%orig;
+	brushButton.hidden = false;
+	threeDBrushButton.hidden = false;
+}
+
+// Hides and shows the brush button
+- (void)drawingEnabled:(_Bool)arg1 {	
+	if (arg1 == true) {
+		brushButton.hidden = false;
+		threeDBrushButton.hidden = false;
+		//circleLayer.hidden = false;
+	} else {
+		brushButton.hidden = true;
+		threeDBrushButton.hidden = true;
+		circleLayer.hidden = true;
+	}
+	%orig();
+}
+
+
+// Setting brush width and stuff, bunch of buttons
+
+%new 
+- (void)threeDBrushButton {
+		// frame = (212.5 0; 44 60)
+	threeDBrushButton = [UIButton buttonWithType:UIButtonTypeSystem];
+	threeDBrushButton.frame = CGRectMake(screenWidth-68, (screenHeight/4)+55, 70, 70);
+	//button.center = CGPointMake((320/2)+50, 60);
+	
+	UIImage *defaultImage = [UIImage imageWithContentsOfFile:[bundle pathForResource:@"ThreeD@2x" ofType:@"png"]];
+	[threeDBrushButton setImage:[defaultImage imageWithRenderingMode: UIImageRenderingModeAlwaysOriginal] forState:UIControlStateNormal];
+	[threeDBrushButton addTarget:self action:@selector(threeDBrushButtonTouchAction:) forControlEvents:UIControlEventTouchDown];
+	[threeDBrushButton addTarget:self action:@selector(threeDBrushButtonReleaseAction:) forControlEvents:UIControlEventTouchUpInside];
+	[threeDBrushButton addTarget:self action:@selector(threeDBrushButtonDragAction:) forControlEvents:UIControlEventTouchUpOutside];
+	threeDBrushButton.hidden = true;
+	[self.view addSubview:threeDBrushButton];
+}
+
+%new
+- (void)threeDBrushButtonTouchAction:(id)sender {
+	isHoldingThreeDButton = true;
+	[self performSelector:@selector(drawingEnabled:) withObject:(id)false];
+	//UIButton* button = (UIButton*)sender;
+	circleLayer.hidden = false; // Shows the user the circle so they can set their brushWidth
+	buttonPressedStartTime = CFAbsoluteTimeGetCurrent();
+}
+
+%new
+- (void)threeDBrushButtonReleaseAction:(id)sender {
+	isHoldingThreeDButton = false;
+	[self performSelector:@selector(drawingEnabled:) withObject:(id)true];
+	float buttonHeldTime = CFAbsoluteTimeGetCurrent() - buttonPressedStartTime; // Seconds
+	if(buttonHeldTime > 0.5) {
+		brushWidth = force*100; // Sets the brushWidth to the size of the circle
+		brushButtonState = 7;
+		//NSLog(@"Nightmare::brushWidth %f", brushWidth);
+		
+		// Makes the brush button visual empty so the user knows they are using the 3D touch brush
+		UIImage *emptyImage = [UIImage imageWithContentsOfFile:[bundle pathForResource:@"empty_button@2x" ofType:@"png"]];
+		[brushButton setImage:[emptyImage imageWithRenderingMode: UIImageRenderingModeAlwaysOriginal] forState:UIControlStateNormal];
+		
+		// Show a checkmark so that the user knows the brush size was set
+		checkmarkView.hidden = NO;
+		checkmarkView.alpha = 1.0f;
+		// Then fades it away after 2 seconds (the cross-fade animation will take 0.5s)
+		[UIView animateWithDuration:0.5 delay:1.0 options:0 animations:^{
+			 // Animate the alpha value of your imageView from 1.0 to 0.0 here
+			 checkmarkView.alpha = 0.0f;
+		 } completion:^(BOOL finished) {
+			 // Once the animation is completed and the alpha has gone to 0.0, hide the view for good
+			 checkmarkView.hidden = YES;
+		 }];
+	}/* else {
+		//UIImage *unselectedImage = [UIImage imageWithContentsOfFile:[bundle pathForResource:@"paint_bucket_button@2x" ofType:@"png"]];
+		//UIImage *selectedImage = [UIImage imageWithContentsOfFile:[bundle pathForResource:@"paint_bucket_button_pressed@2x" ofType:@"png"]];
+		if ([sender isSelected]) {
+			//[sender setImage:[unselectedImage imageWithRenderingMode: UIImageRenderingModeAlwaysOriginal] forState:UIControlStateNormal];
+			//[sender setSelected:NO];
+			brushButtonState = 2;
+		} else {
+			//[sender setImage:[selectedImage imageWithRenderingMode: UIImageRenderingModeAlwaysOriginal] forState:UIControlStateSelected];
+			//[sender setSelected:YES];
+			brushButtonState = 7;
+		}
+		brushState = [NSString stringWithFormat:@"%d", brushButtonState];
+		brushStateLabel.text = brushState;
+	}*/
+	circleLayer.hidden = true; // No longer necessary to show the user the circle because they have selected their size or deselected the button
+}
+
+%new
+- (void)threeDBrushButtonDragAction:(id)sender {
+	isHoldingThreeDButton = false;
+	[self performSelector:@selector(drawingEnabled:) withObject:(id)true];
+	circleLayer.hidden = true; // No longer necessary to show the user the circle because they have selected their size or deselected the button
+}
+
+%new 
+- (void)incrementBrushButton {
+		// frame = (212.5 0; 44 60)
+	brushButton = [UIButton buttonWithType:UIButtonTypeSystem];
+	brushButton.frame = CGRectMake(screenWidth-68, (screenHeight/4)+10, 70, 70);
+	//button.center = CGPointMake((320/2)+50, 60);
+	UIImage *defaultImage = [UIImage imageWithContentsOfFile:[bundle pathForResource:@"brush_size_3@2x" ofType:@"png"]];
+	[brushButton setImage:[defaultImage imageWithRenderingMode: UIImageRenderingModeAlwaysOriginal] forState:UIControlStateNormal];
+	[brushButton addTarget:self action:@selector(incrementBrushAction:)
+	 forControlEvents:UIControlEventTouchUpInside];
+	brushButton.hidden = true;
+	[self.view addSubview:brushButton];
+}
+
+%new
+- (void)incrementBrushAction:(id)sender {
+	//UIButton* button = (UIButton*)sender;
+	if (brushButtonState >= maxBrushState) {
+		brushButtonState = 1; // If switched from 3d to normal
+	}
+	brushButtonState = fmod(brushButtonState+1, maxBrushState);
+	brushState = [NSString stringWithFormat:@"%d", brushButtonState];
+	brushStateLabel.text = brushState;
+	if (brushButtonState < maxBrushState) {
+		UIImage *unselectedImage = brushImageArray[brushButtonState];
+		[sender setImage:[unselectedImage imageWithRenderingMode: UIImageRenderingModeAlwaysOriginal] forState:UIControlStateNormal];
+	} else {
+		UIImage *emptyImage = [UIImage imageWithContentsOfFile:[bundle pathForResource:@"empty_button@2x" ofType:@"png"]];
+		[sender setImage:[emptyImage imageWithRenderingMode: UIImageRenderingModeAlwaysOriginal] forState:UIControlStateNormal];
+	}
+	
+}
+
+- (void)viewWillAppear:(_Bool)arg1 {
+	%orig();
+	[circleLayer setPath:[[UIBezierPath bezierPathWithOvalInRect:CGRectMake((screenWidth/2)-5/2, (screenHeight/2)-5/2, 5, 5)] CGPath]];
+	[circleLayer setStrokeColor:[[UIColor whiteColor] CGColor]];
+	[circleLayer setFillColor:[[UIColor blackColor] CGColor]];
+	[[self.view layer] addSublayer:circleLayer];
+	
+	circleLayer.hidden = true;
+	
+	brushStateView = [[UIImageView alloc] initWithFrame:CGRectMake(150.0, 0, 70, 70)];
+	brushStateView.hidden=true;
+	
+	NSString *brushImagePath1 = [bundle pathForResource:@"brush_size_1@2x" ofType:@"png"];
+	UIImage *brushImage1 = [UIImage imageWithContentsOfFile:brushImagePath1];
+	NSString *brushImagePath2 = [bundle pathForResource:@"brush_size_2@2x" ofType:@"png"];
+	UIImage *brushImage2 = [UIImage imageWithContentsOfFile:brushImagePath2];
+	NSString *brushImagePath3 = [bundle pathForResource:@"brush_size_3@2x" ofType:@"png"];
+	UIImage *brushImage3 = [UIImage imageWithContentsOfFile:brushImagePath3];
+	NSString *brushImagePath4 = [bundle pathForResource:@"brush_size_4@2x" ofType:@"png"];
+	UIImage *brushImage4 = [UIImage imageWithContentsOfFile:brushImagePath4];
+	NSString *brushImagePath5 = [bundle pathForResource:@"brush_size_5@2x" ofType:@"png"];
+	UIImage *brushImage5 = [UIImage imageWithContentsOfFile:brushImagePath5];
+	NSString *brushImagePath6 = [bundle pathForResource:@"brush_size_6@2x" ofType:@"png"];
+	UIImage *brushImage6 = [UIImage imageWithContentsOfFile:brushImagePath6];
+	NSString *brushImagePath7 = [bundle pathForResource:@"brush_size_7@2x" ofType:@"png"];
+	UIImage *brushImage7 = [UIImage imageWithContentsOfFile:brushImagePath7];
+	
+	brushImageArray = [[NSArray alloc] initWithObjects:brushImage1, brushImage2, brushImage3, brushImage4, brushImage5, brushImage6, brushImage7, nil];
+	//brushStateView.image = brushImageArray[brushButtonState];
+	[self.view addSubview:brushStateView];
+
+	brushStateLabel.text = brushState;
+	brushStateLabel.textColor = [UIColor orangeColor];
+	brushStateLabel.textAlignment = UITextAlignmentCenter;
+
+	brushStateLabel.tag = 10;
+	brushStateLabel.backgroundColor = [UIColor clearColor];
+	brushStateLabel.font = [UIFont fontWithName:@"MarkerFelt-Thin" size:24.0];
+	brushStateLabel.highlighted = YES;
+	brushStateLabel.highlightedTextColor = [UIColor blueColor];
+	brushStateLabel.lineBreakMode = YES;
+	brushStateLabel.numberOfLines = 0;
+	brushStateLabel.hidden=true;
+	
+	[self.view addSubview:brushStateLabel];
+	
+	pressureLabel.text = @"PRESSURE";
+	pressureLabel.textColor = [UIColor orangeColor];
+	pressureLabel.textAlignment = UITextAlignmentCenter;
+
+	pressureLabel.tag = 10;
+	pressureLabel.backgroundColor = [UIColor whiteColor];
+	pressureLabel.font = [UIFont fontWithName:@"MarkerFelt-Thin" size:24.0];
+	pressureLabel.highlighted = YES;
+	pressureLabel.highlightedTextColor = [UIColor redColor];
+	pressureLabel.lineBreakMode = YES;
+	pressureLabel.numberOfLines = 0;
+	pressureLabel.hidden = true;
+	
+	[self.view addSubview:pressureLabel];
+	[self performSelector:@selector(incrementBrushButton)]; 
+	[self performSelector:@selector(threeDBrushButton)]; 
+}
+- (void)viewDidLoad {
+	%orig;
+	useDefaultBrushColor = true;
+	//NSLog(@"Nightmare::screenWidth = %f", screenWidth);
+	//NSLog(@"Nightmare::screenHeight = %f", screenHeight);
+	brushButtonState = 2; // Default state
+	checkmarkView =[[UIImageView alloc] initWithFrame:CGRectMake((screenWidth/2)-150/2, (screenHeight/4)-100/2, 150, 100)];
+	checkmarkView.image = [UIImage imageWithContentsOfFile:[bundle pathForResource:@"checkmark@2x" ofType:@"png"]];
+	[self.view addSubview:checkmarkView];
+	checkmarkView.hidden = true;
+}
+%end
+
+// Detects the pressure from the 3D touch
+%hook UILongPressGestureRecognizer
+-(void)touchesMoved:(id)arg1 withEvent:(id)arg2 {
+	%orig;
+	NSSet * touches = arg1;
+	//UIEvent* event = arg2; 
+	NSArray* touchesArray = [touches allObjects];
+	UITouch* touch = touchesArray[0];
+	if(touch) {
+		// Checks to see if 3D touch is availiable
+		if ([[self.view traitCollection] forceTouchCapability] == UIForceTouchCapabilityAvailable) {
+			pressureLabel.text = @"3D touch ready";
+			
+			if (touch.force >= touch.maximumPossibleForce) {
+				pressureLabel.text = @"MAX PRESSURE";
+				if (isPortrait) {
+					[circleLayer setPath:[[UIBezierPath bezierPathWithOvalInRect:CGRectMake((screenWidth/2)-100/2, (screenHeight/2)-100/2, 100, 100)] CGPath]];
+				} else {
+					[circleLayer setPath:[[UIBezierPath bezierPathWithOvalInRect:CGRectMake((screenHeight/2)-100/2, (screenWidth/2)-100/2, 100, 100)] CGPath]];
+				}
+			} else {
+				force = touch.force/touch.maximumPossibleForce;
+				if (isPortrait) {
+					[circleLayer setPath:[[UIBezierPath bezierPathWithOvalInRect:CGRectMake((screenWidth/2)-(force*100)/2, (screenHeight/2)-(force*100)/2, force*100, force*100)] CGPath]];
+				} else {
+					[circleLayer setPath:[[UIBezierPath bezierPathWithOvalInRect:CGRectMake((screenHeight/2)-(force*100)/2, (screenWidth/2)-(force*100)/2, force*100, force*100)] CGPath]];
+				}
+				pressureLabel.text = [NSString stringWithFormat:@"%.20f", force];
+				//pressureLabel.text = @"3D touch ready";
+			}
+		} else {
+			pressureLabel.text = @"3D touch not supported";
+		}
+	}
+}
+-(void)touchesEnded:(id)arg1 withEvent:(id)arg2 {
+	%orig;
+	// Essentially hides the circle
+	[circleLayer setPath:[[UIBezierPath bezierPathWithOvalInRect:CGRectMake(0, 0, 0, 0)] CGPath]];
+	pressureLabel.text = @"No pressure";
+}
+%end

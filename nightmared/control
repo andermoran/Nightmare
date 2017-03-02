@@ -1,0 +1,9 @@
+Package: com.andermoran.nightmared
+Name: nightmared
+Depends:
+Version: 0.0.1
+Architecture: iphoneos-arm
+Description: A daemon that requests displayNames and atomicName (AKA usernames) from the Snapchat application
+Maintainer: Ander Moran
+Author: Ander Moran<andermorandev@gmail.com>
+Section: System

@@ -1,0 +1,9 @@
+Package: com.andermoran.nightmare
+Name: Nightmare
+Depends: mobilesubstrate
+Version: 1.3
+Architecture: iphoneos-arm
+Description: Beautiful nightmode for Snapchat. Ability to hide certain friend’s stories. Another features as well.
+Maintainer: Ander Moran
+Author: Ander Moran
+Section: Tweaks

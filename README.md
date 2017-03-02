@@ -1,0 +1,1 @@
+The graveyard of my Cydia tweak called Nightmare. It was a customized night mode for Snapchat that I built in late 2016. I discontinued working on it after Snapchat implement harsher punishes for loading tweaks into Snapchat. Hopefully you can learn from this project. All this code worked at SOME point in time. Enjoy.

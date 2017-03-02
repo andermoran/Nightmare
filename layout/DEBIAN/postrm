@@ -1,0 +1,7 @@
+#!/bin/sh
+if [ $1 = "remove" ]; then
+	echo Removing Nightmare preferences
+	echo Removing data…
+	/bin/rm /var/root/Documents/nightmared
+fi
+exit 0
